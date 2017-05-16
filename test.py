@@ -82,36 +82,70 @@ def build_cnn(input_var=None):
     # Input layer, as usual:
     network = lasagne.layers.InputLayer(shape=(None, 4, 256, 256),
                                         input_var=input_var)
-    # This time we do not apply input dropout, as it tends to work less well
-    # for convolutional layers.
 
-    # Convolutional layer with 32 kernels of size 5x5. Strided and padded
-    # convolutions are supported as well; see the docstring.
     network = lasagne.layers.Conv2DLayer(
-           network, num_filters=32, filter_size=(5, 5),
+           network, num_filters=64, filter_size=(3, 3),
            nonlinearity=lasagne.nonlinearities.rectify,
            W=lasagne.init.GlorotUniform())
-    # Expert note: Lasagne provides alternative convolutional layers that
-    # override Theano's choice of which implementation to use; for details
-    # please see http://lasagne.readthedocs.org/en/latest/user/tutorial.html.
+    network = lasagne.layers.Conv2DLayer(
+           network, num_filters=64, filter_size=(3, 3),
+           nonlinearity=lasagne.nonlinearities.rectify,
+           W=lasagne.init.GlorotUniform())
 
-    # Max-pooling layer of factor 2 in both dimensions:
     network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
 
-    # Another convolution with 32 5x5 kernels, and another 2x2 pooling:
     network = lasagne.layers.Conv2DLayer(
-            network, num_filters=32, filter_size=(5, 5),
+            network, num_filters=128, filter_size=(3, 3),
+            nonlinearity=lasagne.nonlinearities.rectify)
+    network = lasagne.layers.Conv2DLayer(
+            network, num_filters=128, filter_size=(3, 3),
             nonlinearity=lasagne.nonlinearities.rectify)
 
     network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
 
-    # A fully-connected layer of 256 units with 50% dropout on its inputs:
+    network = lasagne.layers.Conv2DLayer(
+            network, num_filters=256, filter_size=(3, 3),
+            nonlinearity=lasagne.nonlinearities.rectify)
+    network = lasagne.layers.Conv2DLayer(
+            network, num_filters=256, filter_size=(3, 3),
+            nonlinearity=lasagne.nonlinearities.rectify)
+    network = lasagne.layers.Conv2DLayer(
+            network, num_filters=256, filter_size=(3, 3),
+            nonlinearity=lasagne.nonlinearities.rectify)
+    network = lasagne.layers.Conv2DLayer(
+            network, num_filters=256, filter_size=(3, 3),
+            nonlinearity=lasagne.nonlinearities.rectify)
+
+    network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
+
+    network = lasagne.layers.Conv2DLayer(
+            network, num_filters=512, filter_size=(3, 3),
+            nonlinearity=lasagne.nonlinearities.rectify)
+    network = lasagne.layers.Conv2DLayer(
+            network, num_filters=512, filter_size=(3, 3),
+            nonlinearity=lasagne.nonlinearities.rectify)
+    network = lasagne.layers.Conv2DLayer(
+            network, num_filters=512, filter_size=(3, 3),
+            nonlinearity=lasagne.nonlinearities.rectify)
+    network = lasagne.layers.Conv2DLayer(
+            network, num_filters=512, filter_size=(3, 3),
+            nonlinearity=lasagne.nonlinearities.rectify)
+
+    network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
+
     network = lasagne.layers.DenseLayer(
             lasagne.layers.dropout(network, p=.5),
-            num_units=256,
+            num_units=4096,
+            nonlinearity=lasagne.nonlinearities.rectify)
+    network = lasagne.layers.DenseLayer(
+            lasagne.layers.dropout(network, p=.5),
+            num_units=4096,
+            nonlinearity=lasagne.nonlinearities.rectify)
+    network = lasagne.layers.DenseLayer(
+            lasagne.layers.dropout(network, p=.5),
+            num_units=1000,
             nonlinearity=lasagne.nonlinearities.rectify)
 
-    # And, finally, the 10-unit output layer with 50% dropout on its inputs:
     network = lasagne.layers.DenseLayer(
             lasagne.layers.dropout(network, p=.5),
             num_units=17,
@@ -216,6 +250,16 @@ def main():
 
     predict_fn = theano.function([input_var],T.round_half_away_from_zero(test_prediction))
 
+    all_layer_params = lasagne.layers.get_all_param_values(network)
+
+    all_params = 0
+    for layer in all_layer_params:
+        this_params = np.prod(layer.shape)
+        all_params += this_params
+        print("layer params:"+this_params)
+
+    print("all params:"+all_params/1e6)
+
     print("Starting training...")
     # We iterate over epochs:
     for epoch in range(num_epochs):
@@ -224,7 +268,7 @@ def main():
         train_batches = 0
         start_time = time.time()
         train_f2 = 0
-        for batch in iterate_minibatches(Xtrain, ytrain, 100, shuffle=False):
+        for batch in iterate_minibatches(Xtrain, ytrain, 50, shuffle=False):
             inputs, targets = batch
 
             color_channel_means = np.mean(np.mean(inputs,axis=0),axis=0)
