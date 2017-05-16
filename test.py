@@ -43,7 +43,7 @@ def get_labels(no_images, path):
 
     return (training_data_matrix)
 
-def get_image_data(no_image, directory):
+def get_image_data(no_image, directory,mmap_location):
     # Extract all training images from a directory
     training_images = []
     for (dirpath, dirnames, filenames) in walk(directory):
@@ -51,21 +51,26 @@ def get_image_data(no_image, directory):
         break
 
     # Use skimage to put all the training data into a big array which is IMAGES,LEFT,RIGHT,CHANNEL
-    training_image_data = np.zeros((no_image, 256, 256, 4), dtype=np.double)
+    training_image_data = np.memmap(mmap_location, dtype=np.double, mode='w+', shape=(no_image, 4, 256, 256))
     image_iterator = 0
     for training_image in training_images:
         if (image_iterator < no_image):
+
             raw_data = (io.imread(directory+training_image))
-            color_channel_means = np.mean(np.mean(raw_data,axis=0),axis=0)
-            color_channel_stdevs = np.std(np.std(raw_data,axis=0),axis=0)
 
-            raw_data = (raw_data - color_channel_means)/color_channel_stdevs # SCALE R,G,B,IR to mean 0 and stddev 1
+            #color_channel_means = np.mean(np.mean(raw_data,axis=0),axis=0)
+            #color_channel_stdevs = np.std(np.std(raw_data,axis=0),axis=0)
 
-            training_image_data[image_iterator, :, :, :] = raw_data
+            #raw_data = (raw_data - color_channel_means)/color_channel_stdevs # SCALE R,G,B,IR to mean 0 and stddev 1
+
+            training_image_data[image_iterator, :, :, :] = np.swapaxes(raw_data,0,2)
             image_iterator += 1
 
-    training_image_data = np.swapaxes(training_image_data,1,3)
+            if (image_iterator % 200 == 0):
 
+                print(image_iterator/no_image)
+
+    training_image_data.flush()
     return(training_image_data)
 
 
@@ -83,8 +88,8 @@ def build_cnn(input_var=None):
     # Convolutional layer with 32 kernels of size 5x5. Strided and padded
     # convolutions are supported as well; see the docstring.
     network = lasagne.layers.Conv2DLayer(
-           network, num_filters=10, filter_size=(5, 5),
-           nonlinearity=lasagne.nonlinearities.leaky_rectify,
+           network, num_filters=32, filter_size=(5, 5),
+           nonlinearity=lasagne.nonlinearities.rectify,
            W=lasagne.init.GlorotUniform())
     # Expert note: Lasagne provides alternative convolutional layers that
     # override Theano's choice of which implementation to use; for details
@@ -96,19 +101,15 @@ def build_cnn(input_var=None):
     # Another convolution with 32 5x5 kernels, and another 2x2 pooling:
     network = lasagne.layers.Conv2DLayer(
             network, num_filters=32, filter_size=(5, 5),
-            nonlinearity=lasagne.nonlinearities.leaky_rectify)
-
-
+            nonlinearity=lasagne.nonlinearities.rectify)
 
     network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
-
-
 
     # A fully-connected layer of 256 units with 50% dropout on its inputs:
     network = lasagne.layers.DenseLayer(
             lasagne.layers.dropout(network, p=.5),
             num_units=256,
-            nonlinearity=lasagne.nonlinearities.leaky_rectify)
+            nonlinearity=lasagne.nonlinearities.rectify)
 
     # And, finally, the 10-unit output layer with 50% dropout on its inputs:
     network = lasagne.layers.DenseLayer(
@@ -142,41 +143,44 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
             excerpt = slice(start_idx, start_idx + batchsize)
         yield inputs[excerpt], targets[excerpt]
 
+from sklearn.metrics import fbeta_score
+import numpy as np
+
+def f2_score(y_true, y_pred):
+    # fbeta_score throws a confusing error if inputs are not numpy arrays
+    y_true, y_pred, = np.array(y_true), np.array(y_pred)
+    # We need to use average='samples' here, any other average method will generate bogus results
+    return fbeta_score(y_true, y_pred, beta=2, average='samples')
+
 def main():
 
-    train_images = 200
-    test_images = 100
+    train_images = 1000
     num_epochs = 20
 
     PLANET_KAGGLE_ROOT = "B:/rainforest-kaggle/"
-    TRAIN_SET = "lewis-data/mini/train/"
-    TEST_SET = "lewis-data/mini/test/"
+    TRAIN_SET = "train-tif-v2/"
 
-    # Generate Training Data from Files - Save to Numpy File
-    y_train = get_labels(train_images,PLANET_KAGGLE_ROOT+"lewis-data/mini/train.csv")
-    X_train = get_image_data(train_images,PLANET_KAGGLE_ROOT+TRAIN_SET)
+    # # Generate Training Data from Files - Save to Numpy File
+    # y = get_labels(train_images,PLANET_KAGGLE_ROOT+"lewis-data/mini/train.csv")
+    # np.save("training_labels_data", y)
+    # X = get_image_data(train_images,PLANET_KAGGLE_ROOT+TRAIN_SET,PLANET_KAGGLE_ROOT+"imagedatammap")
+    # np.save("training_image_data",X)
+    # exit()
 
-    y_test = get_labels(test_images,PLANET_KAGGLE_ROOT+"lewis-data/mini/test.csv")
-    X_test = get_image_data(test_images,PLANET_KAGGLE_ROOT+TEST_SET)
+    X = np.load("training_image_data.npy",mmap_mode='r')
+    y = np.load("training_labels_data.npy")
 
-    np.save("training_image_data",X_train)
-    np.save("training_labels_data",y_train)
+    Xtrain = X[0:800,:,:,:]
+    ytrain = y[0:800,:]
 
-    np.save("test_image_data",X_test)
-    np.save("test_labels_data",y_test)
-
-    # Quick load the data
-    X_train = np.load("training_image_data.npy")
-    y_train = np.load("training_labels_data.npy")
-
-    X_test = np.load("test_image_data.npy")
-    y_test = np.load("test_labels_data.npy")
+    Xtest = X[801:1000,:,:,:]
+    ytest = y[801:1000,:]
 
     print("loaded data")
 
     # Prepare Theano variables for inputs and targets
     input_var = T.tensor4('inputs')
-    target_var = T.imatrix('targets')
+    target_var = T.matrix('targets')
 
     network = build_cnn(input_var)
 
@@ -209,7 +213,8 @@ def main():
 
     # Compile a second function computing the validation loss and accuracy:
     training_acc = T.mean(T.eq(T.round_half_away_from_zero(test_prediction), target_var), dtype=theano.config.floatX)
-    training_fn = theano.function([input_var, target_var], [test_loss, training_acc])
+
+    predict_fn = theano.function([input_var],T.round_half_away_from_zero(test_prediction))
 
     print("Starting training...")
     # We iterate over epochs:
@@ -218,22 +223,49 @@ def main():
         train_err = 0
         train_batches = 0
         start_time = time.time()
-        for batch in iterate_minibatches(X_train, y_train, 200, shuffle=True):
+        train_f2 = 0
+        for batch in iterate_minibatches(Xtrain, ytrain, 100, shuffle=False):
             inputs, targets = batch
+
+            color_channel_means = np.mean(np.mean(inputs,axis=0),axis=0)
+            color_channel_stdevs = np.std(np.std(inputs,axis=0),axis=0)
+
+            inputs = (inputs - color_channel_means)/color_channel_stdevs # SCALE R,G,B,IR to mean 0 and stddev 1
+
             train_err += train_fn(inputs, targets)
             train_batches += 1
+            train_f2 += f2_score(targets,predict_fn(inputs))
+            print("train minibatch")
 
          # Then we print the results for this epoch:
         print("Epoch {} of {} took {:.3f}s".format(
             epoch + 1, num_epochs, time.time() - start_time))
 
-        testErr, testAcc = training_fn(X_test, y_test)
-        trainingErr, trainingAcc = training_fn(X_train, y_train)
+        print("TRAINING: loss: \t\t{!s:} accuracy: {!s:} f2: {!s:}".format(train_err/train_batches,0,train_f2/train_batches))
 
-        print("TRAINING: loss: \t\t{!s:} accuracy: {!s:}".format(trainingErr, trainingAcc))
-        print("TEST: loss: \t\t{!s:} accuracy: {!s:}".format(testErr, testAcc))
+        test_f2 = 0
+        test_batches = 0
 
-    print(predict_fn(X_train))
+        for batch in iterate_minibatches(Xtest,ytest,100,shuffle=False):
+            inputs, targets = batch
+
+            color_channel_means = np.mean(np.mean(inputs,axis=0),axis=0)
+            color_channel_stdevs = np.std(np.std(inputs,axis=0),axis=0)
+
+            inputs = (inputs - color_channel_means)/color_channel_stdevs # SCALE R,G,B,IR to mean 0 and stddev 1
+
+            test_batches += 1
+            test_f2 += f2_score(targets,predict_fn(inputs))
+            print("test minibatch")
+
+        print("TEST: loss: \t\t{!s:} accuracy: {!s:} f2: {!s:}".format("", "",test_f2 / test_batches))
+
+        #testErr, testAcc = training_fn(X, y)
+        #trainingErr, trainingAcc = training_fn(X, y)
+
+        #print("TRAINING: loss: \t\t{!s:} accuracy: {!s:}".format(trainingErr, trainingAcc))
+        #print("TEST: loss: \t\t{!s:} accuracy: {!s:}".format(testErr, testAcc))
+
 
 
 
