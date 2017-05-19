@@ -1,151 +1,70 @@
-import numpy as np
 from skimage import io
-from os import walk
-import csv
 import sys
-import sklearn.preprocessing as pp
 import time
-
-import numpy as np
 import theano
 import theano.tensor as T
 import lasagne
+from numpy import genfromtxt
+from sklearn.metrics import fbeta_score
+import numpy as np
 
 # Data operations
-def get_labels(no_images, path):
-    # Parse the training data into an nparray
-    training_data = np.empty((no_images), dtype=object)
-    row_iterator = 0
-    with open(path, 'rt', encoding="UTF8") as f:
-        reader = csv.reader(f)
-        for row in reader:
-            if (row_iterator > 0) and (row_iterator <= no_images):
-                training_data[row_iterator - 1] = row[1].split(" ")
-            row_iterator += 1
+def get_labels(path):
 
-    # Find all the labels
-    #all_labels = np.unique(
-    #    np.asarray(([item for sublist in training_data for item in sublist])));  # flattens all label data
-
-    all_labels = np.load("labels.npy")
+    label_data = genfromtxt(path, delimiter=',',dtype=np.str)[1:,:] # read csv, remove header row
+    all_labels = np.load("labels.npy") # read labels
 
     # Build a large matrix IMAGES X TAG CODE
-    training_data_matrix = np.zeros((no_images, all_labels.shape[0]), dtype=np.uint16)
+    training_data_matrix = np.zeros((len(label_data), all_labels.shape[0]), dtype=np.uint16)
     row_iterator = 0
-    with open(path, 'rt', encoding="UTF8") as f:
-        reader = csv.reader(f)
-        for row in reader:
-            if (row_iterator > 0) and (row_iterator <= no_images):
-                training_data[row_iterator - 1] = row[1].split(" ")
-                for col in training_data[row_iterator - 1]:
-                    training_data_matrix[(row_iterator - 1, np.where(all_labels == col))] = 1
-            row_iterator += 1
 
-    return (training_data_matrix)
+    for row in label_data:
+        split_labels = row[1].split(" ")
+        for col in split_labels:
+            training_data_matrix[row_iterator,np.where(all_labels == col)] = 1
+        row_iterator += 1
 
-def get_image_data(no_image, directory,mmap_location):
+    # Test is in line
+    assert (min(label_data[4,1].split(" ") == all_labels[training_data_matrix[4,:].astype(bool)])== True)
+    assert (min(label_data[40, 1].split(" ") == all_labels[training_data_matrix[40, :].astype(bool)]) == True)
+
+    return (label_data,training_data_matrix)
+
+def pickle_image_data(y, ylabels, imageDirectory, pickleDirectory):
     # Extract all training images from a directory
-    training_images = []
-    for (dirpath, dirnames, filenames) in walk(directory):
-        training_images.extend(filenames)
-        break
-
     # Use skimage to put all the training data into a big array which is IMAGES,LEFT,RIGHT,CHANNEL
-    training_image_data = np.memmap(mmap_location, dtype=np.double, mode='w+', shape=(no_image, 4, 256, 256))
-    image_iterator = 0
-    for training_image in training_images:
-        if (image_iterator < no_image):
 
-            raw_data = (io.imread(directory+training_image))
+    iterator = 0
 
-            #color_channel_means = np.mean(np.mean(raw_data,axis=0),axis=0)
-            #color_channel_stdevs = np.std(np.std(raw_data,axis=0),axis=0)
+    for (image_name,labels) in ylabels:
 
-            #raw_data = (raw_data - color_channel_means)/color_channel_stdevs # SCALE R,G,B,IR to mean 0 and stddev 1
+            raw_data = io.imread(imageDirectory+image_name+".tif")
+            np.save(file=pickleDirectory + "train_" + str(iterator), arr=np.swapaxes(raw_data,0,2))
 
-            training_image_data[image_iterator, :, :, :] = np.swapaxes(raw_data,0,2)
-            image_iterator += 1
+            iterator += 1
 
-            if (image_iterator % 200 == 0):
+            if (iterator % 500 == 0):
+                print("image" + str(iterator))
 
-                print(image_iterator/no_image)
+def basic_cnn(input_var=None):
 
-    training_image_data.flush()
-    return(training_image_data)
-
-
-
-def build_cnn(input_var=None):
-    # As a third model, we'll create a CNN of two convolution + pooling stages
-    # and a fully-connected hidden layer in front of the output layer.
-
-    # Input layer, as usual:
     network = lasagne.layers.InputLayer(shape=(None, 4, 256, 256),
                                         input_var=input_var)
-
     network = lasagne.layers.Conv2DLayer(
-           network, num_filters=64, filter_size=(3, 3),
-           nonlinearity=lasagne.nonlinearities.rectify,
+           network, num_filters=10, filter_size=(5, 5),
+           nonlinearity=lasagne.nonlinearities.leaky_rectify,
            W=lasagne.init.GlorotUniform())
-    network = lasagne.layers.Conv2DLayer(
-           network, num_filters=64, filter_size=(3, 3),
-           nonlinearity=lasagne.nonlinearities.rectify,
-           W=lasagne.init.GlorotUniform())
-
     network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
 
     network = lasagne.layers.Conv2DLayer(
-            network, num_filters=128, filter_size=(3, 3),
-            nonlinearity=lasagne.nonlinearities.rectify)
-    network = lasagne.layers.Conv2DLayer(
-            network, num_filters=128, filter_size=(3, 3),
-            nonlinearity=lasagne.nonlinearities.rectify)
+            network, num_filters=32, filter_size=(5, 5),
+            nonlinearity=lasagne.nonlinearities.leaky_rectify)
 
     network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
-
-    network = lasagne.layers.Conv2DLayer(
-            network, num_filters=256, filter_size=(3, 3),
-            nonlinearity=lasagne.nonlinearities.rectify)
-    network = lasagne.layers.Conv2DLayer(
-            network, num_filters=256, filter_size=(3, 3),
-            nonlinearity=lasagne.nonlinearities.rectify)
-    network = lasagne.layers.Conv2DLayer(
-            network, num_filters=256, filter_size=(3, 3),
-            nonlinearity=lasagne.nonlinearities.rectify)
-    network = lasagne.layers.Conv2DLayer(
-            network, num_filters=256, filter_size=(3, 3),
-            nonlinearity=lasagne.nonlinearities.rectify)
-
-    network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
-
-    network = lasagne.layers.Conv2DLayer(
-            network, num_filters=512, filter_size=(3, 3),
-            nonlinearity=lasagne.nonlinearities.rectify)
-    network = lasagne.layers.Conv2DLayer(
-            network, num_filters=512, filter_size=(3, 3),
-            nonlinearity=lasagne.nonlinearities.rectify)
-    network = lasagne.layers.Conv2DLayer(
-            network, num_filters=512, filter_size=(3, 3),
-            nonlinearity=lasagne.nonlinearities.rectify)
-    network = lasagne.layers.Conv2DLayer(
-            network, num_filters=512, filter_size=(3, 3),
-            nonlinearity=lasagne.nonlinearities.rectify)
-
-    network = lasagne.layers.MaxPool2DLayer(network, pool_size=(2, 2))
-
     network = lasagne.layers.DenseLayer(
             lasagne.layers.dropout(network, p=.5),
-            num_units=4096,
-            nonlinearity=lasagne.nonlinearities.rectify)
-    network = lasagne.layers.DenseLayer(
-            lasagne.layers.dropout(network, p=.5),
-            num_units=4096,
-            nonlinearity=lasagne.nonlinearities.rectify)
-    network = lasagne.layers.DenseLayer(
-            lasagne.layers.dropout(network, p=.5),
-            num_units=1000,
-            nonlinearity=lasagne.nonlinearities.rectify)
-
+            num_units=256,
+            nonlinearity=lasagne.nonlinearities.leaky_rectify)
     network = lasagne.layers.DenseLayer(
             lasagne.layers.dropout(network, p=.5),
             num_units=17,
@@ -153,33 +72,88 @@ def build_cnn(input_var=None):
 
     return network
 
-0# ############################# Batch iterator ###############################
-# This is just a simple helper function iterating over training data in
-# mini-batches of a particular size, optionally in random order. It assumes
-# data is available as numpy arrays. For big datasets, you could load numpy
-# arrays as memory-mapped files (np.load(..., mmap_mode='r')), or write your
-# own custom data iteration function. For small datasets, you can also copy
-# them to GPU at once for slightly improved performance. This would involve
-# several changes in the main program, though, and is not demonstrated here.
-# Notice that this function returns only mini-batches of size `batchsize`.
-# If the size of the data is not a multiple of `batchsize`, it will not
-# return the last (remaining) mini-batch.
+def vgg16(input_var=None):
+    from lasagne.layers import InputLayer
+    from lasagne.layers import DenseLayer
+    from lasagne.layers import DropoutLayer
+    from lasagne.layers import Pool2DLayer as PoolLayer
+    from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
 
-def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
-    assert len(inputs) == len(targets)
+    def build_model():
+        net = {}
+        net['input'] = InputLayer((None, 4, 256, 256))
+        net['conv1_1'] = ConvLayer(
+            net['input'], 64, 3, pad=1, flip_filters=False)
+        net['conv1_2'] = ConvLayer(
+            net['conv1_1'], 64, 3, pad=1, flip_filters=False)
+        net['pool1'] = PoolLayer(net['conv1_2'], 2)
+        net['conv2_1'] = ConvLayer(
+            net['pool1'], 128, 3, pad=1, flip_filters=False)
+        net['conv2_2'] = ConvLayer(
+            net['conv2_1'], 128, 3, pad=1, flip_filters=False)
+        net['pool2'] = PoolLayer(net['conv2_2'], 2)
+        net['conv3_1'] = ConvLayer(
+            net['pool2'], 256, 3, pad=1, flip_filters=False)
+        net['conv3_2'] = ConvLayer(
+            net['conv3_1'], 256, 3, pad=1, flip_filters=False)
+        net['conv3_3'] = ConvLayer(
+            net['conv3_2'], 256, 3, pad=1, flip_filters=False)
+        net['pool3'] = PoolLayer(net['conv3_3'], 2)
+        net['conv4_1'] = ConvLayer(
+            net['pool3'], 512, 3, pad=1, flip_filters=False)
+        net['conv4_2'] = ConvLayer(
+            net['conv4_1'], 512, 3, pad=1, flip_filters=False)
+        net['conv4_3'] = ConvLayer(
+            net['conv4_2'], 512, 3, pad=1, flip_filters=False)
+        net['pool4'] = PoolLayer(net['conv4_3'], 2)
+        net['conv5_1'] = ConvLayer(
+            net['pool4'], 512, 3, pad=1, flip_filters=False)
+        net['conv5_2'] = ConvLayer(
+            net['conv5_1'], 512, 3, pad=1, flip_filters=False)
+        net['conv5_3'] = ConvLayer(
+            net['conv5_2'], 512, 3, pad=1, flip_filters=False)
+        net['pool5'] = PoolLayer(net['conv5_3'], 2)
+        net['fc6'] = DenseLayer(net['pool5'], num_units=4096)
+        net['fc6_dropout'] = DropoutLayer(net['fc6'], p=0.5)
+        net['fc7'] = DenseLayer(net['fc6_dropout'], num_units=4096)
+        net['fc7_dropout'] = DropoutLayer(net['fc7'], p=0.5)
+        net['fc8'] = DenseLayer(
+            net['fc7_dropout'], num_units=17, nonlinearity=lasagne.nonlinearities.sigmoid)
+
+        return net['fc7_dropout']
+
+# ############################# Batch iterator ###############################
+def iterate_minibatches(ymatrix, ylabels, picklesdir, batchsize, shuffle=False, center = True, scale = True):
+    assert len(ylabels) == len(ymatrix)
+
     if shuffle:
-        indices = np.arange(len(inputs))
+        indices = np.arange(len(ymatrix))
         np.random.shuffle(indices)
-    for start_idx in range(0, len(inputs) - batchsize + 1, batchsize):
+
+    for start_idx in range(0, len(ymatrix) - batchsize + 1, batchsize):
         if shuffle:
             excerpt = indices[start_idx:start_idx + batchsize]
         else:
             excerpt = slice(start_idx, start_idx + batchsize)
-        yield inputs[excerpt], targets[excerpt]
 
-from sklearn.metrics import fbeta_score
-import numpy as np
+        image_data_minibatch = np.empty(shape=(len(ylabels[excerpt]),4,256,256),dtype=np.uint16)
 
+        it = 0
+        for (pickle_name,labels) in ylabels[excerpt]:
+            image_data_minibatch[it,:,:,:] = np.load(picklesdir + pickle_name+".npy")
+            it += 1
+
+        if (center):
+            color_channel_means = np.mean(np.mean(image_data_minibatch,axis=0),axis=0)
+            image_data_minibatch = (image_data_minibatch - color_channel_means)
+
+        if (scale):
+            color_channel_stdevs = np.std(np.std(image_data_minibatch,axis=0),axis=0)
+            image_data_minibatch = image_data_minibatch/color_channel_stdevs # SCALE R,G,B,IR to mean 0 and stddev 1
+
+        yield image_data_minibatch,ymatrix[excerpt]
+
+# ############################# F2 Score ####################################
 def f2_score(y_true, y_pred):
     # fbeta_score throws a confusing error if inputs are not numpy arrays
     y_true, y_pred, = np.array(y_true), np.array(y_pred)
@@ -188,35 +162,36 @@ def f2_score(y_true, y_pred):
 
 def main():
 
-    train_images = 1000
     num_epochs = 20
 
     PLANET_KAGGLE_ROOT = "B:/rainforest-kaggle/"
-    TRAIN_SET = "train-tif-v2/"
+    PICKLE_DIR = "train-pickles/"
 
-    # # Generate Training Data from Files - Save to Numpy File
-    # y = get_labels(train_images,PLANET_KAGGLE_ROOT+"lewis-data/mini/train.csv")
-    # np.save("training_labels_data", y)
-    # X = get_image_data(train_images,PLANET_KAGGLE_ROOT+TRAIN_SET,PLANET_KAGGLE_ROOT+"imagedatammap")
-    # np.save("training_image_data",X)
-    # exit()
+    # Generate Training Data from Files - Save to Numpy File
+    #ylabels,y = get_labels(PLANET_KAGGLE_ROOT+"train.csv")
+    #np.save(file=PLANET_KAGGLE_ROOT+"labelmatrix",arr=y)
+    #np.save(file=PLANET_KAGGLE_ROOT+"labeldata",arr=ylabels)
+    #pickle_image_data(y, ylabels, PLANET_KAGGLE_ROOT + "train-tif-v2/", PLANET_KAGGLE_ROOT + "train-pickles/")
+    #exit()
 
-    X = np.load("training_image_data.npy",mmap_mode='r')
-    y = np.load("training_labels_data.npy")
+    y = np.load(PLANET_KAGGLE_ROOT+"labelmatrix.npy")
+    ylabels = np.load(PLANET_KAGGLE_ROOT+"labeldata.npy")
 
-    Xtrain = X[0:800,:,:,:]
-    ytrain = y[0:800,:]
+    print("Loaded labels...")
 
-    Xtest = X[801:1000,:,:,:]
-    ytest = y[801:1000,:]
+    ytrain = y[0:800,]
+    ytrainlabels = ylabels[0:800,]
 
-    print("loaded data")
+    ytest = y[0:800,]
+    ytestlabels = ylabels[0:800,]
 
     # Prepare Theano variables for inputs and targets
     input_var = T.tensor4('inputs')
     target_var = T.matrix('targets')
 
-    network = build_cnn(input_var)
+    network = basic_cnn(input_var)
+
+    print ("Built model...")
 
     # Create a loss expression for training, i.e., a scalar objective we want
     # to minimize (for our multi-class problem, it is the cross-entropy loss):
@@ -239,26 +214,24 @@ def main():
     test_objective = lasagne.objectives.binary_crossentropy(test_prediction, target_var)
     test_loss = test_objective.mean()
 
-    # Also create an expression for the classification accuracy:
-
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
     train_fn = theano.function([input_var, target_var], loss, updates=updates)
 
     # Compile a second function computing the validation loss and accuracy:
-    training_acc = T.mean(T.eq(T.round_half_away_from_zero(test_prediction), target_var), dtype=theano.config.floatX)
+    # training_acc = T.mean(T.eq(T.round_half_away_from_zero(test_prediction), target_var), dtype=theano.config.floatX)
 
     predict_fn = theano.function([input_var],T.round_half_away_from_zero(test_prediction))
 
-    all_layer_params = lasagne.layers.get_all_param_values(network)
+    # all_layer_params = lasagne.layers.get_all_param_values(network)
+    #
+    # all_params = 0
+    # for layer in all_layer_params:
+    #     this_params = np.prod(layer.shape)
+    #     all_params += this_params
+    #     print("layer params:"+this_params)
 
-    all_params = 0
-    for layer in all_layer_params:
-        this_params = np.prod(layer.shape)
-        all_params += this_params
-        print("layer params:"+this_params)
-
-    print("all params:"+all_params/1e6)
+    #print("all params:"+all_params/1e6)
 
     print("Starting training...")
     # We iterate over epochs:
@@ -268,13 +241,8 @@ def main():
         train_batches = 0
         start_time = time.time()
         train_f2 = 0
-        for batch in iterate_minibatches(Xtrain, ytrain, 50, shuffle=False):
+        for batch in iterate_minibatches(ytrain, ytrainlabels, PLANET_KAGGLE_ROOT + PICKLE_DIR, 200, shuffle=False):
             inputs, targets = batch
-
-            color_channel_means = np.mean(np.mean(inputs,axis=0),axis=0)
-            color_channel_stdevs = np.std(np.std(inputs,axis=0),axis=0)
-
-            inputs = (inputs - color_channel_means)/color_channel_stdevs # SCALE R,G,B,IR to mean 0 and stddev 1
 
             train_err += train_fn(inputs, targets)
             train_batches += 1
@@ -289,27 +257,14 @@ def main():
 
         test_f2 = 0
         test_batches = 0
-
-        for batch in iterate_minibatches(Xtest,ytest,100,shuffle=False):
+        for batch in iterate_minibatches(ytest,ytestlabels,PLANET_KAGGLE_ROOT + PICKLE_DIR,100, shuffle=False):
             inputs, targets = batch
-
-            color_channel_means = np.mean(np.mean(inputs,axis=0),axis=0)
-            color_channel_stdevs = np.std(np.std(inputs,axis=0),axis=0)
-
-            inputs = (inputs - color_channel_means)/color_channel_stdevs # SCALE R,G,B,IR to mean 0 and stddev 1
 
             test_batches += 1
             test_f2 += f2_score(targets,predict_fn(inputs))
             print("test minibatch")
 
         print("TEST: loss: \t\t{!s:} accuracy: {!s:} f2: {!s:}".format("", "",test_f2 / test_batches))
-
-        #testErr, testAcc = training_fn(X, y)
-        #trainingErr, trainingAcc = training_fn(X, y)
-
-        #print("TRAINING: loss: \t\t{!s:} accuracy: {!s:}".format(trainingErr, trainingAcc))
-        #print("TEST: loss: \t\t{!s:} accuracy: {!s:}".format(testErr, testAcc))
-
 
 
 
