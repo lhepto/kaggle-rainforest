@@ -7,27 +7,27 @@ import lasagne
 import numpy as np
 
 from mlutils import pickle_model_params,iterate_minibatches,f2_score
-#from modelsDNN import larger_cnn,basic_cnn
-from models import larger_cnn,basic_cnn
+from modelsDNN import larger_cnn,basic_cnn
+#from models import larger_cnn,basic_cnn
 
 def main():
 
     num_epochs = 150
     batch_size = 100
 
-    PLANET_KAGGLE_ROOT = "B:/rainforest-kaggle"
-    PICKLE_DIR = "train-pickles"
+    PLANET_KAGGLE_ROOT = "/home/ubuntu/ebs100"
+    PICKLE_DIR = "training_pickles"
 
     y = np.load(PLANET_KAGGLE_ROOT + "/" + "labelmatrix.npy")
     ylabels = np.load(PLANET_KAGGLE_ROOT + "/" + "labeldata.npy")
 
     print("Loaded labels...")
 
-    ytrain = y[0:100,]
-    ytrainlabels = ylabels[0:100,]
+    ytrain = y[0:32000,]
+    ytrainlabels = ylabels[0:32000,]
 
-    ytest = y[0:100,]
-    ytestlabels = ylabels[0:100,]
+    ytest = y[32001:40000,]
+    ytestlabels = ylabels[32001:40000,]
 
     # Prepare Theano variables for inputs and targets
     input_var = T.tensor4('inputs')

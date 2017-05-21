@@ -31,7 +31,7 @@ def iterate_minibatches(ymatrix, ylabels, picklesdir, batchsize, shuffle=False, 
             color_channel_stdevs = np.std(np.std(image_data_minibatch,axis=0),axis=0)
             image_data_minibatch = image_data_minibatch/color_channel_stdevs # SCALE R,G,B,IR to mean 0 and stddev 1
 
-        yield image_data_minibatch,ymatrix[excerpt]
+        yield image_data_minibatch.astype('float32'),ymatrix[excerpt]
 
 # ############################# F2 Score ####################################
 def f2_score(y_true, y_pred):
