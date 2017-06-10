@@ -43,9 +43,7 @@ def iterate_minibatches(ymatrix, ylabels, picklesdir, batchsize, shuffle=False, 
 
         #image_data_minibatch = image_data_minibatch[:,1:3,:,:]
 
-
-
-        yield image_data_minibatch,ymatrix[excerpt]
+        yield image_data_minibatch.astype('float32'), ymatrix[excerpt]
 
 # ############################# F2 Score ####################################
 def f2_score(y_true, y_pred):

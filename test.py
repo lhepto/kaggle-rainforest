@@ -100,7 +100,7 @@ def main():
         test_acc = 0
         test_loss = 0
 
-        for batch in iterate_minibatches(ytest,ytestlabels, PLANET_KAGGLE_ROOT + "/" + PICKLE_DIR,batch_size, shuffle=False):
+        for batch in iterate_minibatches(ytest,ytestlabels, PLANET_KAGGLE_ROOT + "/" + PICKLE_DIR,batch_size, shuffle=False,rotate=True):
             inputs, targets = batch
 
             test_batches += 1
