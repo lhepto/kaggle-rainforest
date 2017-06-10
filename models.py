@@ -28,9 +28,9 @@ def basic_cnn(input_var=None):
 
     return (network)
 
-def larger_cnn(input_var=None):
+def larger_cnn(input_var=None, image_size=256):
 
-    network = lasagne.layers.InputLayer(shape=(None, 4, 256, 256),
+    network = lasagne.layers.InputLayer(shape=(None, 4, image_size, image_size),
                                         input_var=input_var)
 
     network = lasagne.layers.Conv2DLayer(

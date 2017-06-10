@@ -3,9 +3,10 @@ import scipy
 from sklearn.metrics import fbeta_score
 import numpy as np
 from random import randint
+from skimage.transform import rescale,resize
 
 # ############################# Batch iterator ###############################
-def iterate_minibatches(ymatrix, ylabels, picklesdir, batchsize, shuffle=False, center = True, scale = True, rotate=True):
+def iterate_minibatches(ymatrix, ylabels, picklesdir, batchsize, shuffle=False, center = True, scale = True, rotate=True, resizeTo=0):
     assert len(ylabels) == len(ymatrix)
 
     if shuffle:
@@ -18,7 +19,10 @@ def iterate_minibatches(ymatrix, ylabels, picklesdir, batchsize, shuffle=False, 
         else:
             excerpt = slice(start_idx, start_idx + batchsize)
 
-        image_data_minibatch = np.empty(shape=(len(ylabels[excerpt]),4,256,256),dtype=np.uint16)
+        if (resizeTo==0):
+            image_data_minibatch = np.empty(shape=(len(ylabels[excerpt]),4,256,256),dtype=np.uint16)
+        else:
+            image_data_minibatch = np.empty(shape=(len(ylabels[excerpt]), 4, resizeTo, resizeTo), dtype=np.uint16)
 
         it = 0
         for (pickle_name,labels) in ylabels[excerpt]:
@@ -27,6 +31,9 @@ def iterate_minibatches(ymatrix, ylabels, picklesdir, batchsize, shuffle=False, 
 
             if (rotate):
                 image = scipy.ndimage.rotate(image, randint(0, 3) * 90)
+
+            if (resizeTo != 0):
+                image = scipy.misc.imresize(image,(resizeTo,resizeTo,4))
 
             image = np.swapaxes(image, 0, 2)
 

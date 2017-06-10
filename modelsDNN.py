@@ -29,7 +29,7 @@ def basic_cnn(input_var=None):
 
     return (network)
 
-def vgg16(input_var=None):
+def vgg16(input_var=None,image_size=256):
     from lasagne.layers import InputLayer
     from lasagne.layers import DenseLayer
     from lasagne.layers import NonlinearityLayer
@@ -39,7 +39,7 @@ def vgg16(input_var=None):
     from lasagne.nonlinearities import softmax
 
     net = {}
-    net['input'] = InputLayer((None, 4, 256, 256),input_var=input_var)
+    net['input'] = InputLayer((None, 4, image_size, image_size),input_var=input_var)
     net['conv1_1'] = ConvLayer(
         net['input'], 64, 3, pad=1, flip_filters=False)
     net['conv1_2'] = ConvLayer(

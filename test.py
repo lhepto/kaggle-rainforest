@@ -7,16 +7,17 @@ import lasagne
 import numpy as np
 
 from mlutils import pickle_model_params,iterate_minibatches,f2_score
-from modelsDNN import larger_cnn,basic_cnn
-#from models import larger_cnn,basic_cnn
+#from modelsDNN import larger_cnn,basic_cnn
+from models import larger_cnn,basic_cnn
 
 def main():
 
     num_epochs = 150
     batch_size = 100
+    image_size = 128
 
-    PLANET_KAGGLE_ROOT = "/home/ubuntu/ebs100"
-    PICKLE_DIR = "training_pickles"
+    PLANET_KAGGLE_ROOT = "B:/rainforest-kaggle"
+    PICKLE_DIR = "train-pickles"
 
     y = np.load(PLANET_KAGGLE_ROOT + "/" + "labelmatrix.npy")
     ylabels = np.load(PLANET_KAGGLE_ROOT + "/" + "labeldata.npy")
@@ -33,7 +34,7 @@ def main():
     input_var = T.tensor4('inputs')
     target_var = T.matrix('targets')
 
-    network = larger_cnn(input_var)
+    network = larger_cnn(input_var,image_size)
 
     print ("Built model...")
 
@@ -85,7 +86,7 @@ def main():
         train_batches = 0
         train_f2 = 0
 
-        for batch in iterate_minibatches(ytrain, ytrainlabels, PLANET_KAGGLE_ROOT + "/" + PICKLE_DIR, batch_size, shuffle=False):
+        for batch in iterate_minibatches(ytrain, ytrainlabels, PLANET_KAGGLE_ROOT + "/" + PICKLE_DIR, batch_size, shuffle=False,resizeTo=image_size):
             inputs, targets = batch
 
             train_batches += 1
