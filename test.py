@@ -1,51 +1,39 @@
 
 import sys
 import time
-
-import scipy
 import theano
 import theano.tensor as T
 import lasagne
 import numpy as np
 
-from skimage import io
-from sklearn.preprocessing import MinMaxScaler
-from PIL import Image
-
-from mlutils import pickle_model_params,iterate_minibatches,f2_score,depickle_model_params
+from mlutils import pickle_model_params,iterate_minibatches,f2_score
 from modelsDNN import larger_cnn,basic_cnn
 #from models import larger_cnn,basic_cnn
-from skimage import viewer
 
 def main():
 
     num_epochs = 150
     batch_size = 100
 
-    PLANET_KAGGLE_ROOT = "B:/rainforest-kaggle"
-    PICKLE_DIR = "train-pickles"
-
-
+    PLANET_KAGGLE_ROOT = "/home/ubuntu/ebs100"
+    PICKLE_DIR = "training_pickles"
 
     y = np.load(PLANET_KAGGLE_ROOT + "/" + "labelmatrix.npy")
     ylabels = np.load(PLANET_KAGGLE_ROOT + "/" + "labeldata.npy")
 
     print("Loaded labels...")
 
-    ytrain = y[0:100,]
-    ytrainlabels = ylabels[0:100,]
+    ytrain = y[0:32000,]
+    ytrainlabels = ylabels[0:32000,]
 
-    ytest = y[0:1000,]
-    ytestlabels = ylabels[0:1000,]
+    ytest = y[32001:40000,]
+    ytestlabels = ylabels[32001:40000,]
 
     # Prepare Theano variables for inputs and targets
     input_var = T.tensor4('inputs')
     target_var = T.matrix('targets')
 
-    network = vgg16(input_var)
-
-    network = depickle_model_params(network,'C:/Users/Lewis_2/Desktop/Kaggle Rainforest - attempt 1 vgg style CNN/kaggle-rainforest\model.npz')
-
+    network = larger_cnn(input_var)
 
     print ("Built model...")
 
@@ -97,7 +85,7 @@ def main():
         train_batches = 0
         train_f2 = 0
 
-        for batch in iterate_minibatches(ytrain, ytrainlabels, PLANET_KAGGLE_ROOT + "/" + PICKLE_DIR, batch_size, shuffle=False,rotate=True):
+        for batch in iterate_minibatches(ytrain, ytrainlabels, PLANET_KAGGLE_ROOT + "/" + PICKLE_DIR, batch_size, shuffle=False):
             inputs, targets = batch
 
             train_batches += 1
