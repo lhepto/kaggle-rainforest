@@ -1,9 +1,11 @@
 import lasagne
+import scipy
 from sklearn.metrics import fbeta_score
 import numpy as np
+from random import randint
 
 # ############################# Batch iterator ###############################
-def iterate_minibatches(ymatrix, ylabels, picklesdir, batchsize, shuffle=False, center = True, scale = True):
+def iterate_minibatches(ymatrix, ylabels, picklesdir, batchsize, shuffle=False, center = True, scale = True, rotate=True):
     assert len(ylabels) == len(ymatrix)
 
     if shuffle:
@@ -20,7 +22,15 @@ def iterate_minibatches(ymatrix, ylabels, picklesdir, batchsize, shuffle=False, 
 
         it = 0
         for (pickle_name,labels) in ylabels[excerpt]:
-            image_data_minibatch[it,:,:,:] = np.load(picklesdir + "/" + pickle_name+".npy")
+            image = np.load(picklesdir + "/" + pickle_name+".npy")
+            image = np.swapaxes(image, 0, 2)
+
+            if (rotate):
+                image = scipy.ndimage.rotate(image, randint(0, 3) * 90)
+
+            image = np.swapaxes(image, 0, 2)
+
+            image_data_minibatch[it, :, :, :] = image#scipy.misc.imresize(image, size=(4, 224, 224))
             it += 1
 
         if (center):
@@ -30,6 +40,10 @@ def iterate_minibatches(ymatrix, ylabels, picklesdir, batchsize, shuffle=False, 
         if (scale):
             color_channel_stdevs = np.std(np.std(image_data_minibatch,axis=0),axis=0)
             image_data_minibatch = image_data_minibatch/color_channel_stdevs # SCALE R,G,B,IR to mean 0 and stddev 1
+
+        #image_data_minibatch = image_data_minibatch[:,1:3,:,:]
+
+
 
         yield image_data_minibatch,ymatrix[excerpt]
 
@@ -45,3 +59,9 @@ def pickle_model_params(network):
     # Then we print the results for this epoch:
     np.savez('model.npz', *lasagne.layers.get_all_param_values(network))
     print("pickled succesfully")
+
+def depickle_model_params(network,path):
+    with np.load(path) as f:
+        param_values = [f['arr_%d' % i] for i in range(len(f.files))]
+    lasagne.layers.set_all_param_values(network, param_values)
+    return(network)
